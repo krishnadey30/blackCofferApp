@@ -26,5 +26,17 @@ export FLASK_APP="run.py"
 export SECRET="some-very-long-string-of-random-characters-CHANGE-TO-YOUR-LIKING"
 export APP_SETTINGS="development"
 export DATABASE_URL="postgresql://<username>:<password>@localhost/blackCoffer"
+export TEST_DATABASE_URL="postgresql://<username>:<password>@localhost/testdb"
 ```
 
+## Applying Migrations
+
+`python manage.py db init`
+
+`python manage.py db migrate`
+
+`python manage.py db upgrade`
+
+## Run the App
+
+`flask run`

@@ -1,8 +1,8 @@
 # app/__init__.py
 
+from flask import abort, jsonify, make_response, request
 from flask_api import FlaskAPI
 from flask_sqlalchemy import SQLAlchemy
-from flask import request, jsonify, abort, make_response
 
 # local import
 from instance.config import app_config
@@ -13,65 +13,71 @@ db = SQLAlchemy()
 
 def create_app(config_name):
     from app.models import Bucketlist, User
-
+    from flask_cors import CORS
     app = FlaskAPI(__name__, instance_relative_config=True)
     app.config.from_object(app_config[config_name])
     app.config.from_pyfile('config.py')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
-
+    CORS(app)
     
     @app.route('/bucketlists/', methods=['POST', 'GET'])
     def bucketlists():
         # Get the access token from the header
-        auth_header = request.headers.get('Authorization')
-        access_token = auth_header.split(" ")[1]
+        if 'Authorization' in request.headers:
+            auth_header = request.headers.get('Authorization')
+            access_token = auth_header.split(" ")[1]
 
-        if access_token:
-         # Attempt to decode the token and get the User ID
-            user_id = User.decode_token(access_token)
-            if not isinstance(user_id, str):
-                # Go ahead and handle the request, the user is authenticated
+            if access_token:
+                # Attempt to decode the token and get the User ID
+                user_id = User.decode_token(access_token)
+                if not isinstance(user_id, str):
+                    # Go ahead and handle the request, the user is authenticated
 
-                if request.method == "POST":
-                    name = str(request.data.get('name', ''))
-                    if name:
-                        bucketlist = Bucketlist(name=name, created_by=user_id)
-                        bucketlist.save()
-                        response = jsonify({
-                            'id': bucketlist.id,
-                            'name': bucketlist.name,
-                            'date_created': bucketlist.date_created,
-                            'date_modified': bucketlist.date_modified,
-                            'created_by': user_id
-                        })
+                    if request.method == "POST":
+                        name = str(request.data.get('name', ''))
+                        if name:
+                            bucketlist = Bucketlist(name=name, created_by=user_id)
+                            bucketlist.save()
+                            response = jsonify({
+                                'id': bucketlist.id,
+                                'name': bucketlist.name,
+                                'date_created': bucketlist.date_created,
+                                'date_modified': bucketlist.date_modified,
+                                'created_by': user_id
+                            })
 
-                        return make_response(response), 201
+                            return make_response(response), 201
 
+                    else:
+                        # GET all the bucketlists created by this user
+                        bucketlists = Bucketlist.query.filter_by(created_by=user_id)
+                        results = []
+
+                        for bucketlist in bucketlists:
+                            obj = {
+                                'id': bucketlist.id,
+                                'name': bucketlist.name,
+                                'date_created': bucketlist.date_created,
+                                'date_modified': bucketlist.date_modified,
+                                'created_by': bucketlist.created_by
+                            }
+                            results.append(obj)
+
+                        return make_response(jsonify(results)), 200
                 else:
-                    # GET all the bucketlists created by this user
-                    bucketlists = Bucketlist.query.filter_by(created_by=user_id)
-                    results = []
+                    # user is not legit, so the payload is an error message
+                    message = user_id
+                    response = {
+                        'message': message
+                    }
+                    return make_response(jsonify(response)), 401
+        else:
+            response = {
+                'message': "Access Key Not Found"
+            }
+            return make_response(jsonify(response)), 401
 
-                    for bucketlist in bucketlists:
-                        obj = {
-                            'id': bucketlist.id,
-                            'name': bucketlist.name,
-                            'date_created': bucketlist.date_created,
-                            'date_modified': bucketlist.date_modified,
-                            'created_by': bucketlist.created_by
-                        }
-                        results.append(obj)
-
-                    return make_response(jsonify(results)), 200
-            else:
-                # user is not legit, so the payload is an error message
-                message = user_id
-                response = {
-                    'message': message
-                }
-                return make_response(jsonify(response)), 401
-    
     @app.route('/bucketlists/<int:id>', methods=['GET', 'PUT', 'DELETE'])
     def bucketlist_manipulation(id, **kwargs):
         # get the access token from the authorization header
